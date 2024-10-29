@@ -9,8 +9,8 @@ from pydantic import BaseModel, Field
 
 from db.database import get_db
 from auth.auth import jwks, get_current_user
-from auth.JWTBearer import JWTBearer
-from auth.user_auth import auth_with_code, user_info_with_token
+from auth.JWTBearer import JWTAuthorizationCredentials, JWTBearer
+from auth.user_auth import auth_with_code, user_info_with_token, logout_with_token
 from crud.user import create_user, get_user_by_username, get_user_by_email
 from schemas.user import CreateUser
 
@@ -107,4 +107,34 @@ async def get_current_user_info(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error retrieving user information.",
+        )
+
+@router.get("/auth/logout", response_model=dict, status_code=status.HTTP_200_OK)
+async def logout(credentials: JWTAuthorizationCredentials = Depends(auth)):
+    """
+    Function that logs out a user.
+
+    :param credentials: JWTAuthorizationCredentials object.
+    :return: Message if logout is successful, otherwise raise an HTTPException.
+    """
+    try:
+        result = logout_with_token(credentials.jwt_token)
+        if result:
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={"message": "Logout successful."},
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to log out. Please try again.",
+            )
+    
+    except HTTPException as http_exc:
+        raise http_exc
+    
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal server error occurred during logout. Please try again later.",
         )

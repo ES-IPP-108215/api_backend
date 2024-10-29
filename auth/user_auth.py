@@ -73,7 +73,7 @@ def user_info_with_token(access_token: str):
         return None
 
 
-def logout_with_token(access_token: str):
+def logout_with_token(access_token: str) -> bool:
     """
     Logout the user by revoking the access token.
 
@@ -81,10 +81,16 @@ def logout_with_token(access_token: str):
     :return: True if successful, otherwise False.
     """
 
-    response = cognito_client.global_sign_out(AccessToken=access_token)
+    try:
+        # Attempt to revoke the access token using the global sign-out method
+        response = cognito_client.global_sign_out(AccessToken=access_token)
 
-    if response.get("ResponseMetadata").get("HTTPStatusCode") == 200:
-        return True
-    else:
-        print(f"Error: Error logging out: {response}")
-        return False
+        # Check the response metadata to confirm if the request was successful
+        if response.get("ResponseMetadata", {}).get("HTTPStatusCode") == 200:
+            return True  # Return True if the logout was successful
+        else:
+            # Log an error message with details from the response
+            return False  # Return False if the logout process failed
+
+    except Exception:
+        return False  # Return False if an exception occurs
