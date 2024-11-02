@@ -1,6 +1,6 @@
 import pytest
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.exc import IntegrityError
+from fastapi import HTTPException, status
 from sqlalchemy import create_engine
 from datetime import datetime, timedelta
 from testcontainers.mysql import MySqlContainer
@@ -366,5 +366,9 @@ def test_delete_task_not_found(test_db):
     Test deletion of a task that does not exist.
     """
     non_existent_task_id = "non_existent_task_id"
-    with pytest.raises(ValueError, match="Task not found."):
+    with pytest.raises(HTTPException) as exc_info:
         delete_task_by_id(task_id=non_existent_task_id, db=test_db)
+
+    # Verifica se a exceção capturada é 404
+    assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+    assert exc_info.value.detail == "Task not found."
