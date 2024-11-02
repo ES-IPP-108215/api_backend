@@ -1,7 +1,16 @@
+from enum import Enum
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 from datetime import datetime
 import uuid
+
+class TaskState(str, Enum):
+    """
+    Enumeration for the state of a task.
+    """
+    TO_DO = "to_do"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
 
 class TaskBase(BaseModel):
     """
@@ -40,7 +49,7 @@ class TaskUpdate(BaseModel):
     description: Optional[str] = None
     priority: Optional[str] = None
     deadline: Optional[datetime] = None
-    state: Optional[str] = Field(None, description="State of the task: to_do, in_progress, done")
+    state: Optional[TaskState] = None  # Usando TaskState Enum para limitar os valores
 
 class TaskInDB(TaskBase):
     """
@@ -59,7 +68,7 @@ class TaskInDB(TaskBase):
     user_id: str
     created_at: datetime
     updated_at: datetime
-    state: str = "to_do"
+    state: TaskState = TaskState.TO_DO  # Valor padrão
     deadline: Optional[datetime] = None
     priority: str = "low"
 
