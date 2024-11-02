@@ -12,11 +12,11 @@ class Task(Base):
 
     __tablename__ = 'tasks'
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    title = Column(String)
-    description = Column(String)
-    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
-    priority = Column(String, default='low')  # low, medium, high
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = Column(String(255), nullable=False)
+    description = Column(String(255), nullable=True)
+    user_id = Column(String(36), ForeignKey("user.id"), nullable=False)
+    priority = Column(String(10), default='low')  # low, medium, high
     deadline = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(
         DateTime(timezone=True), 
@@ -31,7 +31,7 @@ class Task(Base):
         onupdate=datetime.datetime.now, 
         nullable=False
     )
-    state = Column(String, default='to_do')  # to_do, in_progress, done
+    state = Column(String(20), default='to_do')  # to_do, in_progress, done
 
     def __repr__(self):
-        return f'<Task {self.title}>'
+        return f"<Task(id={self.id}, title={self.title}, user_id={self.user_id})>"

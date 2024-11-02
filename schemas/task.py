@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 from datetime import datetime
 import uuid
@@ -22,6 +22,7 @@ class TaskCreate(TaskBase):
     """
     Model for creating a new task. Inherits from TaskBase.
     """
+    deadline: Optional[datetime] = None
     pass
 
 class TaskUpdate(BaseModel):
@@ -62,9 +63,7 @@ class TaskInDB(TaskBase):
     deadline: Optional[datetime] = None
     priority: str = "low"
 
-    class Config:
-        orm_mode = True
-
+    model_config = ConfigDict(from_attributes=True)  # Atualização para Pydantic v2
 class TaskResponse(TaskInDB):
     """
     Model for the response returned to the client. Inherits from TaskInDB.
