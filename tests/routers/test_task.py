@@ -7,7 +7,7 @@ import datetime
 from main import app
 from db.database import get_db
 from routers.task import auth
-from schemas.task import TaskResponse
+from schemas.task import TaskResponse, TaskState
 from auth.auth import get_current_user
 from auth.JWTBearer import JWTAuthorizationCredentials, JWTBearer
 
@@ -68,7 +68,7 @@ def test_create_new_task(
         priority="medium",
         created_at=datetime.datetime.now(),
         updated_at=datetime.datetime.now(),
-        state="to_do",
+        state=TaskState.TO_DO,
     )
 
     # Configuração dos mocks
@@ -89,7 +89,7 @@ def test_create_new_task(
     assert response.json()["title"] == "Test Task"
     assert response.json()["description"] == "This is a test task"
     assert response.json()["priority"] == "medium"
-    assert response.json()["state"] == "to_do"
+    assert response.json()["state"] == TaskState.TO_DO.value
 
     app.dependency_overrides = {}
 
@@ -166,3 +166,241 @@ def test_create_task_unexpected_error(mock_jwt_bearer, mock_create_task, mock_ge
     
     assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
     assert response.json()["detail"] == "An error occurred while creating the task."
+
+
+@patch("routers.task.get_user")
+@patch("routers.task.get_task_by_id")
+@patch.object(JWTBearer, "__call__", return_value=credentials)
+def test_get_task_by_id_success(mock_jwt_bearer, mock_get_task_by_id, mock_get_user):
+    """
+    Testa a recuperação bem-sucedida de uma tarefa.
+    """
+    mock_user = MagicMock()
+    mock_user.id = "user_id_123"
+    mock_get_user.return_value = mock_user
+
+    task_data = TaskResponse(
+        id="task_id_123",
+        user_id="user_id_123",
+        title="Sample Task",
+        description="Sample Description",
+        deadline=datetime.datetime.now() + datetime.timedelta(days=1),
+        priority="high",
+        created_at=datetime.datetime.now(),
+        updated_at=datetime.datetime.now(),
+        state=TaskState.TO_DO,
+    )
+    mock_get_task_by_id.return_value = task_data
+
+    response = client.get("/tasks/task_id_123", headers={"Authorization": "Bearer valid_token"})
+    
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["id"] == "task_id_123"
+    assert response.json()["title"] == "Sample Task"
+
+@patch("routers.task.get_user")
+@patch("routers.task.get_task_by_id")
+@patch.object(JWTBearer, "__call__", return_value=credentials)
+def test_get_task_user_not_found(mock_jwt_bearer, mock_get_task_by_id, mock_get_user):
+    """
+    Testa o erro 404 quando o usuário não é encontrado.
+    """
+    mock_get_user.return_value = None  # Simula usuário não encontrado
+
+    response = client.get("/tasks/task_id_123", headers={"Authorization": "Bearer valid_token"})
+    
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "User not found."
+
+@patch("routers.task.get_user")
+@patch("routers.task.get_task_by_id")
+@patch.object(JWTBearer, "__call__", return_value=credentials)
+def test_get_task_not_found(mock_jwt_bearer, mock_get_task_by_id, mock_get_user):
+    """
+    Testa o erro 404 quando a tarefa não é encontrada.
+    """
+    mock_user = MagicMock()
+    mock_user.id = "user_id_123"
+    mock_get_user.return_value = mock_user
+
+    # Simula tarefa não encontrada retornando None
+    mock_get_task_by_id.return_value = None
+
+    response = client.get("/tasks/non_existent_task_id", headers={"Authorization": "Bearer valid_token"})
+    
+    # Verifica se a resposta é 404 Not Found
+    assert response.status_code == status.HTTP_404_NOT_FOUND, f"Esperado status 404, mas obteve {response.status_code}."
+    assert response.json()["detail"] == "Task not found."
+
+@patch("routers.task.get_user")
+@patch("routers.task.get_task_by_id")
+@patch.object(JWTBearer, "__call__", return_value=credentials)
+def test_get_task_forbidden(mock_jwt_bearer, mock_get_task_by_id, mock_get_user):
+    """
+    Testa o erro 403 quando o usuário não tem permissão para acessar a tarefa.
+    """
+    # Configura mock para usuário autenticado
+    mock_user = MagicMock()
+    mock_user.id = "user_id_123"  # ID do usuário autenticado
+    mock_get_user.return_value = mock_user
+
+    # Configura mock para tarefa pertencente a outro usuário
+    task_data = TaskResponse(
+        id="task_id_123",
+        user_id="another_user_id",  # ID de outro usuário
+        title="Sample Task",
+        description="Sample Description",
+        deadline=datetime.datetime.now() + datetime.timedelta(days=1),
+        priority="high",
+        created_at=datetime.datetime.now(),
+        updated_at=datetime.datetime.now(),
+        state=TaskState.TO_DO,
+    )
+    mock_get_task_by_id.return_value = task_data
+
+    # Envia a requisição GET para recuperar a tarefa
+    response = client.get("/tasks/task_id_123", headers={"Authorization": "Bearer valid_token"})
+    
+    # Verifica o status esperado
+    assert response.status_code == status.HTTP_403_FORBIDDEN, f"Esperado status 403, mas obteve {response.status_code}."
+    assert response.json()["detail"] == "Not authorized to access this task."
+
+
+@patch("routers.task.get_user")
+@patch("routers.task.get_task_by_id")
+@patch("routers.task.update_task")
+@patch.object(JWTBearer, "__call__", return_value=credentials)
+def test_update_task_success(mock_jwt_bearer, mock_update_task, mock_get_task_by_id, mock_get_user):
+    """
+    Testa a atualização bem-sucedida de uma tarefa.
+    """
+    mock_user = MagicMock()
+    mock_user.id = "user_id_123"
+    mock_get_user.return_value = mock_user
+
+    existing_task = TaskResponse(
+        id="task_id_123",
+        user_id="user_id_123",
+        title="Sample Task",
+        description="Sample Description",
+        deadline=datetime.datetime.now() + datetime.timedelta(days=1),
+        priority="high",
+        created_at=datetime.datetime.now(),
+        updated_at=datetime.datetime.now(),
+        state=TaskState.TO_DO,
+    )
+    mock_get_task_by_id.return_value = existing_task
+
+    updated_task = existing_task.model_copy()
+    updated_task.title = "Updated Task"
+    mock_update_task.return_value = updated_task
+
+    update_data = {"title": "Updated Task"}
+
+    response = client.put("/tasks/task_id_123", json=update_data, headers={"Authorization": "Bearer valid_token"})
+    
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["title"] == "Updated Task"
+
+@patch("routers.task.get_user")
+@patch("routers.task.update_task")
+@patch.object(JWTBearer, "__call__", return_value=credentials)
+def test_update_task_user_not_found(mock_jwt_bearer, mock_update_task, mock_get_user):
+    """
+    Testa o erro 404 quando o usuário não é encontrado.
+    """
+    mock_get_user.return_value = None  # Simula usuário não encontrado
+
+    update_data = {"title": "Updated Task"}
+
+    response = client.put("/tasks/task_id_123", json=update_data, headers={"Authorization": "Bearer valid_token"})
+    
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "User not found."
+
+@patch("routers.task.get_user")
+@patch("routers.task.get_task_by_id")
+@patch("routers.task.update_task")
+@patch.object(JWTBearer, "__call__", return_value=credentials)
+def test_update_task_not_found(mock_jwt_bearer, mock_update_task, mock_get_task_by_id, mock_get_user):
+    """
+    Testa o erro 404 quando a tarefa não é encontrada.
+    """
+    mock_user = MagicMock()
+    mock_user.id = "user_id_123"
+    mock_get_user.return_value = mock_user
+
+    mock_get_task_by_id.return_value = None
+
+    update_data = {"title": "Updated Task"}
+
+    response = client.put("/tasks/non_existent_task_id", json=update_data, headers={"Authorization": "Bearer valid_token"})
+    
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "Task not found."
+
+@patch("routers.task.get_user")
+@patch("routers.task.get_task_by_id")
+@patch("routers.task.update_task")
+@patch.object(JWTBearer, "__call__", return_value=credentials)
+def test_update_task_forbidden(mock_jwt_bearer, mock_update_task, mock_get_task_by_id, mock_get_user):
+    """
+    Testa o erro 403 quando o usuário não tem permissão para atualizar a tarefa.
+    """
+    mock_user = MagicMock()
+    mock_user.id = "user_id_123"
+    mock_get_user.return_value = mock_user
+
+    existing_task = TaskResponse(
+        id="task_id_123",
+        user_id="another_user_id",  # Usuário diferente
+        title="Sample Task",
+        description="Sample Description",
+        deadline=datetime.datetime.now() + datetime.timedelta(days=1),
+        priority="high",
+        created_at=datetime.datetime.now(),
+        updated_at=datetime.datetime.now(),
+        state=TaskState.TO_DO,
+    )
+    mock_get_task_by_id.return_value = existing_task
+
+    update_data = {"title": "Updated Task"}
+
+    response = client.put("/tasks/task_id_123", json=update_data, headers={"Authorization": "Bearer valid_token"})
+    
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.json()["detail"] == "Not authorized to update this task."
+
+@patch("routers.task.get_user")
+@patch("routers.task.get_task_by_id")
+@patch("routers.task.update_task")
+@patch.object(JWTBearer, "__call__", return_value=credentials)
+def test_update_task_value_error(mock_jwt_bearer, mock_update_task, mock_get_task_by_id, mock_get_user):
+    """
+    Testa o erro 400 quando ocorre um ValueError na atualização da tarefa.
+    """
+    mock_user = MagicMock()
+    mock_user.id = "user_id_123"
+    mock_get_user.return_value = mock_user
+
+    existing_task = TaskResponse(
+        id="task_id_123",
+        user_id="user_id_123",
+        title="Sample Task",
+        description="Sample Description",
+        deadline=datetime.datetime.now() + datetime.timedelta(days=1),
+        priority="high",
+        created_at=datetime.datetime.now(),
+        updated_at=datetime.datetime.now(),
+        state="to_do",
+    )
+    mock_get_task_by_id.return_value = existing_task
+
+    mock_update_task.side_effect = ValueError("Invalid task data")  # Simula erro de validação
+
+    update_data = {"title": "Updated Task"}
+
+    response = client.put("/tasks/task_id_123", json=update_data, headers={"Authorization": "Bearer valid_token"})
+    
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.json()["detail"] == "Invalid task data"

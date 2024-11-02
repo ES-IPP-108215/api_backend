@@ -1,12 +1,14 @@
 import pytest
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import create_engine
 from datetime import datetime, timedelta
 from testcontainers.mysql import MySqlContainer
 from models.task import Task as TaskModel
 from models.user import User as UserModel
-from schemas.task import TaskCreate
-from crud.task import create_task, get_tasks_by_user_id, get_task_by_id
+from schemas.task import TaskCreate, TaskUpdate, TaskState
+from pydantic import ValidationError
+from crud.task import create_task, get_tasks_by_user_id, get_task_by_id, update_task
 import logging
 from db.database import get_db
 from main import app
@@ -106,7 +108,7 @@ def test_create_task_with_deadline(test_db, test_user):
     assert saved_task.description == "Task 1 description"
     assert saved_task.deadline is not None
     assert abs((saved_task.deadline - datetime.now()).days) <= 1
-    assert saved_task.state == "to_do"
+    assert saved_task.state == TaskState.TO_DO
     assert saved_task.priority == "high"
 
 def test_create_task_without_deadline(test_db, test_user: UserModel):
@@ -130,7 +132,7 @@ def test_create_task_without_deadline(test_db, test_user: UserModel):
     assert saved_task.title == "Task 2"
     assert saved_task.description == "Task 2 description"
     assert saved_task.deadline is None
-    assert saved_task.state == "to_do"
+    assert saved_task.state == TaskState.TO_DO
     assert saved_task.priority == "medium"
 
 def test_create_task_with_deadline_past(test_db, test_user: UserModel):
@@ -215,3 +217,126 @@ def test_get_task_by_invalid_id(test_db):
     with pytest.raises(ValueError, match="Task not found."):
         get_task_by_id(task_id=invalid_task_id, db=test_db)
 
+def test_update_task_with_new_data(test_db, test_user):
+    """
+    Test updating a task with new data.
+    """
+    # Criação de uma nova tarefa
+    task_data = TaskCreate(
+        title="Original Task",
+        description="Original description",
+        deadline=datetime.now() + timedelta(days=1),
+        priority="medium",
+    )
+    created_task = create_task(task=task_data, db=test_db, user_id=str(test_user.id))
+
+
+    # Dados de atualização
+    update_data = TaskUpdate(
+        title="Updated Task",
+        description="Updated description",
+        deadline=datetime.now() + timedelta(days=2),
+        priority="high",
+        state=TaskState.IN_PROGRESS
+    )
+
+    # Atualiza a tarefa
+    updated_task = update_task(task_id=created_task.id, task=update_data, db=test_db)
+
+    assert updated_task is not None, "Task update failed"
+    assert updated_task.title == "Updated Task"
+    assert updated_task.description == "Updated description"
+    assert updated_task.priority == "high"
+    assert updated_task.state == TaskState.IN_PROGRESS
+    assert updated_task.deadline is not None, "Deadline should not be None"
+    assert abs((updated_task.deadline - datetime.now()).days) <= 2  # Verifica o deadline com margem de 2 dias
+
+def test_update_task_with_past_deadline(test_db, test_user):
+    """
+    Test updating a task with a past deadline.
+    """
+    # Criação de uma nova tarefa
+    task_data = TaskCreate(
+        title="Task with Future Deadline",
+        description="Description",
+        deadline=datetime.now() + timedelta(days=1),
+        priority="medium",
+    )
+    created_task = create_task(task=task_data, db=test_db, user_id=str(test_user.id))
+
+    # Dados de atualização com deadline no passado
+    update_data = TaskUpdate(
+        deadline=datetime.now() - timedelta(days=1)
+    )
+
+    # Testa se ValueError é levantado
+    with pytest.raises(ValueError, match="The deadline cannot be in the past."):
+        update_task(task_id=created_task.id, task=update_data, db=test_db)
+
+def test_update_task_without_title(test_db, test_user):
+    """
+    Test updating a task without a title, which should raise a ValueError.
+    """
+    # Criação de uma nova tarefa
+    task_data = TaskCreate(
+        title="Original Task",
+        description="Original description",
+        deadline=datetime.now() + timedelta(days=1),
+        priority="low",
+    )
+    created_task = create_task(task=task_data, db=test_db, user_id=str(test_user.id))
+
+    # Dados de atualização sem título
+    update_data = TaskUpdate(
+        title=""
+    )
+
+    # Testa se ValueError é levantado
+    with pytest.raises(ValueError, match="The task must have a title."):
+        update_task(task_id=created_task.id, task=update_data, db=test_db)
+
+def test_update_task_with_invalid_timezone(test_db, test_user):
+    """
+    Test updating a task with an invalid timezone, which should raise a ValueError.
+    """
+    # Criação de uma nova tarefa
+    task_data = TaskCreate(
+        title="Original Task",
+        description="Original description",
+        deadline=datetime.now() + timedelta(days=1),
+        priority="low",
+    )
+    created_task = create_task(task=task_data, db=test_db, user_id=str(test_user.id))
+
+    # Dados de atualização com timezone inválido
+    update_data = TaskUpdate(
+        title="Updated Task"
+    )
+
+    # Testa se ValueError é levantado
+    with pytest.raises(ValueError, match="Invalid timezone."):
+        update_task(task_id=created_task.id, task=update_data, db=test_db, timezone="invalid_timezone")
+
+def test_update_task_with_invalid_state(test_db, test_user):
+    """
+    Test updating a task with an invalid state, which should raise a ValidationError.
+    """
+    # Criação de uma nova tarefa
+    task_data = TaskCreate(
+        title="Task for Invalid State Test",
+        description="This task will test invalid state handling",
+        deadline=datetime.now() + timedelta(days=1),
+        priority="medium",
+    )
+    created_task = create_task(task=task_data, db=test_db, user_id=str(test_user.id))
+
+    # Dados de atualização com estado inválido
+    update_data = {
+        "state": "invalid_state"  # Estado inválido
+    }
+
+    # Testa se ValidationError é levantado ao tentar definir um estado inválido
+    with pytest.raises(ValidationError) as exc_info:
+        update_task(task_id=created_task.id, task=TaskUpdate(**update_data), db=test_db)
+
+    assert "Input should be 'to_do', 'in_progress' or 'done'" in str(exc_info.value)
