@@ -213,7 +213,6 @@ def test_get_task_by_invalid_id(test_db):
     Test retrieving a task with a non-existent ID, which should raise a ValueError.
     """
     invalid_task_id = "non_existent_task_id"
-
     with pytest.raises(ValueError, match="Task not found."):
         get_task_by_id(task_id=invalid_task_id, db=test_db)
 
@@ -368,7 +367,5 @@ def test_delete_task_not_found(test_db):
     non_existent_task_id = "non_existent_task_id"
     with pytest.raises(HTTPException) as exc_info:
         delete_task_by_id(task_id=non_existent_task_id, db=test_db)
-
-    # Verifica se a exceção capturada é 404
-    assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+    assert exc_info.value.status_code == 404
     assert exc_info.value.detail == "Task not found."
