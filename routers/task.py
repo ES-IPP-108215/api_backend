@@ -75,6 +75,10 @@ async def get_task(task_id: str,
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access this task.")
 
         return task
+    
+    except ValueError as val_err:
+        logging.error("Error retrieving task: %s", val_err)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found.") from val_err
 
     except HTTPException as http_exc:
         raise http_exc  # Propaga exceções HTTP específicas já configuradas
@@ -160,3 +164,30 @@ async def delete_task(task_id: str,
     except Exception as exc:
         logging.exception("Unexpected error deleting task: %s", exc)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An error occurred while deleting the task.") from exc
+
+
+@router.get('/tasks', 
+            response_model=List[TaskInDB],
+            status_code=status.HTTP_200_OK,
+            dependencies=[Depends(auth)])
+async def get_tasks_by_user(db: Session = Depends(get_db),
+                            current_user_username: str = Depends(get_current_user)):
+    """
+    Retrieve all tasks for the authenticated user.
+    """
+    # Obtém o usuário autenticado
+    user = get_user(current_user_username, db=db)
+
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+    
+    try:
+        # Obtém as tarefas associadas ao usuário
+        tasks = get_tasks_by_user_id(user_id=str(user.id), db=db)
+        if not tasks:
+            return []
+        return tasks
+    
+    except Exception as exc:
+        logging.exception("Unexpected error retrieving tasks for user: %s", exc)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An error occurred while retrieving tasks.") from exc

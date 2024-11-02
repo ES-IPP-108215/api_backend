@@ -485,3 +485,100 @@ def test_delete_task_forbidden(mock_jwt_bearer, mock_delete_task_by_id, mock_get
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
     assert response.json()["detail"] == "Not authorized to delete this task."
+
+@patch("routers.task.get_user")
+@patch("routers.task.get_tasks_by_user_id")
+@patch.object(JWTBearer, "__call__", return_value=credentials)
+def test_get_tasks_by_user(mock_jwt_bearer, mock_get_tasks_by_user_id, mock_get_user):
+    """
+    Testa a recuperação das tarefas do usuário autenticado com sucesso.
+    """
+    mock_user = MagicMock()
+    mock_user.id = "user_id_123"
+    mock_get_user.return_value = mock_user
+
+    task_1 = TaskResponse(
+        id="task_id_1",
+        user_id="user_id_123",
+        title="Task 1",
+        description="First task",
+        deadline=datetime.datetime.now() + datetime.timedelta(days=1),
+        priority="medium",
+        created_at=datetime.datetime.now(),
+        updated_at=datetime.datetime.now(),
+        state=TaskState.TO_DO,
+    )
+    task_2 = TaskResponse(
+        id="task_id_2",
+        user_id="user_id_123",
+        title="Task 2",
+        description="Second task",
+        deadline=datetime.datetime.now() + datetime.timedelta(days=2),
+        priority="high",
+        created_at=datetime.datetime.now(),
+        updated_at=datetime.datetime.now(),
+        state=TaskState.IN_PROGRESS,
+    )
+    
+    mock_get_tasks_by_user_id.return_value = [task_1, task_2]
+
+    headers = {"Authorization": "Bearer valid_token"}
+    response = client.get("/tasks", headers=headers)
+
+    assert response.status_code == 200
+    assert len(response.json()) == 2
+    assert response.json()[0]["title"] == "Task 1"
+    assert response.json()[1]["title"] == "Task 2"
+
+@patch("routers.task.get_user")
+@patch("routers.task.get_tasks_by_user_id")
+@patch.object(JWTBearer, "__call__", return_value=credentials)
+def test_get_tasks_by_user_no_tasks(mock_jwt_bearer, mock_get_tasks_by_user_id, mock_get_user):
+    """
+    Testa a recuperação quando o usuário não possui tarefas.
+    """
+    mock_user = MagicMock()
+    mock_user.id = "user_id_123"
+    mock_get_user.return_value = mock_user
+    mock_get_tasks_by_user_id.return_value = []
+
+    headers = {"Authorization": "Bearer valid_token"}
+    response = client.get("/tasks", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+@patch("routers.task.get_user")
+@patch("routers.task.get_tasks_by_user_id")
+@patch.object(JWTBearer, "__call__", return_value=credentials)
+def test_get_tasks_by_user_not_found(mock_jwt_bearer, mock_get_tasks_by_user_id, mock_get_user):
+    """
+    Testa o erro 404 quando o usuário não é encontrado.
+    """
+    mock_get_user.return_value = None  # Simula usuário não encontrado
+
+    headers = {"Authorization": "Bearer valid_token"}
+    response = client.get("/tasks", headers=headers)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "User not found."
+
+@patch("routers.task.get_user")
+@patch("routers.task.get_tasks_by_user_id")
+@patch.object(JWTBearer, "__call__", return_value=credentials)
+def test_get_tasks_by_user_unexpected_error(mock_jwt_bearer, mock_get_tasks_by_user_id, mock_get_user):
+    """
+    Testa o erro 500 quando ocorre uma exceção inesperada.
+    """
+    mock_user = MagicMock()
+    mock_user.id = "user_id_123"
+    mock_get_user.return_value = mock_user
+
+    # Simula uma exceção inesperada no get_tasks_by_user_id
+    mock_get_tasks_by_user_id.side_effect = Exception("Unexpected error")
+
+    headers = {"Authorization": "Bearer valid_token"}
+    response = client.get("/tasks", headers=headers)
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "An error occurred while retrieving tasks."
