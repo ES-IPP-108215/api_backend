@@ -147,3 +147,4 @@ def test_exception_during_logout(mock_cognito_client_global_sign_out_function):
 
     # Como ocorreu uma exceção, o resultado esperado é False
     assert result is False
+
