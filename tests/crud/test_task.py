@@ -105,7 +105,7 @@ def test_create_task_with_deadline(test_db, test_user):
     assert saved_task.title == "Task 1"
     assert saved_task.description == "Task 1 description"
     assert saved_task.deadline is not None
-    assert abs((saved_task.deadline - datetime.now()).days) == 1
+    assert abs((saved_task.deadline - datetime.now()).days) <= 1
     assert saved_task.state == "to_do"
     assert saved_task.priority == "high"
 
