@@ -404,3 +404,84 @@ def test_update_task_value_error(mock_jwt_bearer, mock_update_task, mock_get_tas
     
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert response.json()["detail"] == "Invalid task data"
+
+
+@patch("routers.task.get_user")
+@patch("routers.task.get_task_by_id")
+@patch("routers.task.delete_task_by_id")  # Mock da função delete_task_by_id
+@patch.object(JWTBearer, "__call__", return_value=credentials)
+def test_delete_task_success(mock_jwt_bearer, mock_delete_task_by_id, mock_get_task_by_id, mock_get_user):
+    """
+    Testa a exclusão bem-sucedida de uma tarefa.
+    """
+    mock_user = MagicMock()
+    mock_user.id = "user_id_123"
+    mock_get_user.return_value = mock_user
+
+    task_data = TaskResponse(
+        id="task_id_123",
+        user_id="user_id_123",
+        title="Sample Task",
+        description="Sample Description",
+        deadline=datetime.datetime.now() + datetime.timedelta(days=1),
+        priority="high",
+        created_at=datetime.datetime.now(),
+        updated_at=datetime.datetime.now(),
+        state=TaskState.TO_DO,
+    )
+    mock_get_task_by_id.return_value = task_data
+    mock_delete_task_by_id.return_value = True
+
+    response = client.delete("/tasks/task_id_123", headers={"Authorization": "Bearer valid_token"})
+
+    assert response.status_code == status.HTTP_204_NO_CONTENT
+    assert response.content == b""
+
+@patch("routers.task.get_user")
+@patch("routers.task.get_task_by_id")
+@patch("routers.task.delete_task_by_id")
+@patch.object(JWTBearer, "__call__", return_value=credentials)
+def test_delete_task_not_found(mock_jwt_bearer, mock_delete_task_by_id, mock_get_task_by_id, mock_get_user):
+    """
+    Testa o erro 404 ao tentar excluir uma tarefa que não existe.
+    """
+    mock_user = MagicMock()
+    mock_user.id = "user_id_123"
+    mock_get_user.return_value = mock_user
+
+    mock_get_task_by_id.side_effect = ValueError("Task not found.")
+
+    response = client.delete("/tasks/non_existent_task_id", headers={"Authorization": "Bearer valid_token"})
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "Task not found."
+
+@patch("routers.task.get_user")
+@patch("routers.task.get_task_by_id")
+@patch("routers.task.delete_task_by_id")
+@patch.object(JWTBearer, "__call__", return_value=credentials)
+def test_delete_task_forbidden(mock_jwt_bearer, mock_delete_task_by_id, mock_get_task_by_id, mock_get_user):
+    """
+    Testa o erro 403 quando o usuário não tem permissão para excluir a tarefa.
+    """
+    mock_user = MagicMock()
+    mock_user.id = "user_id_123"
+    mock_get_user.return_value = mock_user
+
+    task_data = TaskResponse(
+        id="task_id_123",
+        user_id="another_user_id",  # Diferente do usuário autenticado
+        title="Sample Task",
+        description="Sample Description",
+        deadline=datetime.datetime.now() + datetime.timedelta(days=1),
+        priority="high",
+        created_at=datetime.datetime.now(),
+        updated_at=datetime.datetime.now(),
+        state=TaskState.TO_DO,
+    )
+    mock_get_task_by_id.return_value = task_data
+
+    response = client.delete("/tasks/task_id_123", headers={"Authorization": "Bearer valid_token"})
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.json()["detail"] == "Not authorized to delete this task."

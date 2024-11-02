@@ -1,6 +1,6 @@
 import pytest
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.exc import IntegrityError
+from fastapi import HTTPException, status
 from sqlalchemy import create_engine
 from datetime import datetime, timedelta
 from testcontainers.mysql import MySqlContainer
@@ -8,7 +8,7 @@ from models.task import Task as TaskModel
 from models.user import User as UserModel
 from schemas.task import TaskCreate, TaskUpdate, TaskState
 from pydantic import ValidationError
-from crud.task import create_task, get_tasks_by_user_id, get_task_by_id, update_task
+from crud.task import create_task, get_tasks_by_user_id, get_task_by_id, update_task, delete_task_by_id
 import logging
 from db.database import get_db
 from main import app
@@ -340,3 +340,35 @@ def test_update_task_with_invalid_state(test_db, test_user):
         update_task(task_id=created_task.id, task=TaskUpdate(**update_data), db=test_db)
 
     assert "Input should be 'to_do', 'in_progress' or 'done'" in str(exc_info.value)
+
+def test_delete_task_success(test_db, test_user):
+    """
+    Test successful deletion of a task.
+    """
+    # Criação da tarefa
+    task_data = TaskCreate(
+        title="Task to be deleted",
+        description="This task will be deleted in the test",
+        deadline=datetime.now() + timedelta(days=1),
+        priority="medium",
+    )
+    created_task = create_task(task=task_data, db=test_db, user_id=str(test_user.id))
+
+    # Deletar a tarefa
+    delete_successful = delete_task_by_id(task_id=created_task.id, db=test_db)
+
+    # Verificar se a tarefa foi excluída
+    assert delete_successful is True
+    assert test_db.query(TaskModel).filter(TaskModel.id == created_task.id).first() is None
+
+def test_delete_task_not_found(test_db):
+    """
+    Test deletion of a task that does not exist.
+    """
+    non_existent_task_id = "non_existent_task_id"
+    with pytest.raises(HTTPException) as exc_info:
+        delete_task_by_id(task_id=non_existent_task_id, db=test_db)
+
+    # Verifica se a exceção capturada é 404
+    assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+    assert exc_info.value.detail == "Task not found."

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from db.database import get_db
 from schemas.task import TaskCreate, TaskInDB, TaskUpdate
-from crud.task import create_task, get_tasks_by_user_id, get_task_by_id, update_task
+from crud.task import create_task, delete_task_by_id, get_tasks_by_user_id, get_task_by_id, update_task
 from crud.user import get_user_by_id, get_user
 from auth.auth import jwks, get_current_user
 from auth.JWTBearer import JWTBearer
@@ -125,3 +125,38 @@ async def update_task_route(task_id: str,
     except Exception as exc:
         logging.exception("Unexpected error updating task: %s", exc)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An error occurred while updating the task.") from exc
+
+@router.delete('/tasks/{task_id}',
+               status_code=status.HTTP_204_NO_CONTENT,
+               dependencies=[Depends(auth)])
+async def delete_task(task_id: str,
+                      db: Session = Depends(get_db),
+                      current_user_username: str = Depends(get_current_user)):
+    """
+    Delete a task by its unique identifier for the authenticated user.
+    """
+    user = get_user(current_user_username, db=db)
+
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    try:
+        task = get_task_by_id(task_id, db=db)
+        
+        if task.user_id != str(user.id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to delete this task.")
+        
+        delete_task_by_id(task_id, db=db)
+        return
+
+    except HTTPException as http_exc:
+        # Propaga diretamente a HTTPException já configurada
+        raise http_exc
+    
+    except ValueError as val_err:
+        logging.error("Task deletion error: %s", val_err)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found.") from val_err
+
+    except Exception as exc:
+        logging.exception("Unexpected error deleting task: %s", exc)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An error occurred while deleting the task.") from exc

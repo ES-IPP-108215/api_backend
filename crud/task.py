@@ -2,7 +2,7 @@ from typing import Sequence, Optional
 import pytz
 from datetime import datetime
 from dateutil import parser
-from fastapi import Depends
+from fastapi import Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from models.task import Task
@@ -129,3 +129,16 @@ def update_task(task_id: str, task: TaskUpdate, db: Session = Depends(get_db), t
             "Error: Could not update the task due to a database integrity issue.") from exc
 
     return db_task
+
+def delete_task_by_id(task_id: str, db: Session = Depends(get_db)) -> bool:
+    """
+    Delete a task by its unique identifier.
+    """
+    try:
+        db_task = get_task_by_id(task_id, db)
+        db.delete(db_task)
+        db.commit()
+        return True
+    except ValueError as val_err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found.") from val_err
+
