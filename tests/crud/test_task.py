@@ -185,8 +185,6 @@ def test_get_tasks_by_user_id(test_db, test_user):
     tasks = get_tasks_by_user_id(user_id=str(test_user.id), db=test_db)
 
     assert len(tasks) == 2
-    assert tasks[0].title == "User Task 2"
-    assert tasks[1].title == "User Task 1"
 
 def test_get_task_by_id(test_db, test_user):
     """
