@@ -102,7 +102,7 @@ def update_task(task_id: str, task: TaskUpdate, db: Session = Depends(get_db), t
         raise ValueError("Invalid task state.")
 
     # Conversão de `deadline`, se fornecido
-    if 'deadline' in task_data:
+    if 'deadline' in task_data and task_data['deadline'] is not None:
         if isinstance(task_data['deadline'], str):
             try:
                 task_data['deadline'] = parser.parse(task_data['deadline'])
