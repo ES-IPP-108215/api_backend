@@ -18,7 +18,7 @@ from schemas.user import CreateUser
 load_dotenv()
 
 # Router and Auth setup
-router = APIRouter(tags=["Authentication and Authorization"])
+router = APIRouter(prefix="/api",tags=["Authentication and Authorization"])
 auth = JWTBearer(jwks)
 COGNITO_REDIRECT_URI = os.getenv("REDIRECT_URI")
 

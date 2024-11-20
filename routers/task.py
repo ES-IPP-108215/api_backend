@@ -10,7 +10,7 @@ from crud.user import get_user_by_id, get_user
 from auth.auth import jwks, get_current_user
 from auth.JWTBearer import JWTBearer
 
-router = APIRouter(tags=['tasks'])
+router = APIRouter(prefix='/api', tags=['Tasks'])
 
 auth = JWTBearer(jwks)
 
